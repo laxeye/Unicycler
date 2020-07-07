@@ -31,7 +31,7 @@ class BadFastq(Exception):
 def get_best_spades_graph(short1, short2, short_unpaired, out_dir, read_depth_filter, verbosity,
                           spades_path, threads, keep, kmer_count, min_k_frac, max_k_frac, kmers,
                           no_spades_correct, expected_linear_seqs, spades_tmp_dir,
-                          largest_component):
+                          largest_component, mate1, mate2):
     """
     This function tries a SPAdes assembly at different k-mers and returns the best.
     'The best' is defined as the smallest dead-end count after low-depth filtering.  If multiple
@@ -47,6 +47,7 @@ def get_best_spades_graph(short1, short2, short_unpaired, out_dir, read_depth_fi
     # Make sure that the FASTQ files look good.
     using_paired_reads = bool(short1) and bool(short2)
     using_unpaired_reads = bool(short_unpaired)
+    using_mate_pairs = bool(mate1) and bool(mate2)
     if using_paired_reads:
         count_1, count_2 = 0, 0
         try:
@@ -59,6 +60,18 @@ def get_best_spades_graph(short1, short2, short_unpaired, out_dir, read_depth_fi
             quit_with_error('this read file is not a properly formatted FASTQ: ' + short2)
         if count_1 != count_2:
             quit_with_error('the paired read input files have an unequal number of reads')
+    if using_mate_pairs:
+        count_1, count_2 = 0, 0
+        try:
+            count_1 = get_read_count(mate1)
+        except BadFastq:
+            quit_with_error('this read file is not a properly formatted FASTQ: ' + mate1)
+        try:
+            count_2 = get_read_count(mate2)
+        except BadFastq:
+            quit_with_error('this read file is not a properly formatted FASTQ: ' + mate2)
+        if count_1 != count_2:
+            quit_with_error('the mate paired read input files have an unequal number of reads')
     if using_unpaired_reads:
         try:
             get_read_count(short_unpaired)
@@ -95,7 +108,8 @@ def get_best_spades_graph(short1, short2, short_unpaired, out_dir, read_depth_fi
     best_graph_filename = ''
 
     graph_files, insert_size_mean, insert_size_deviation = \
-        spades_assembly(reads, assem_dir, kmer_range, threads, spades_path, spades_tmp_dir)
+        spades_assembly(reads, assem_dir, kmer_range, threads, spades_path, spades_tmp_dir,
+            False, mate_reads=(mate1, mate2))
 
     existing_graph_files = [x for x in graph_files if x is not None]
     if not existing_graph_files:
@@ -170,7 +184,7 @@ def get_best_spades_graph(short1, short2, short_unpaired, out_dir, read_depth_fi
         new_kmer_range = [x for x in kmer_range if x <= best_kmer]
         graph_file, insert_size_mean, insert_size_deviation = \
             spades_assembly(reads, assem_dir, new_kmer_range, threads, spades_path, spades_tmp_dir,
-                            just_last=True)
+                            just_last=True, mate_reads=(mate1, mate2))
         best_graph_filename = graph_file
     paths_file = os.path.join(assem_dir, 'contigs.paths')
     if os.path.isfile(paths_file):
@@ -348,17 +362,20 @@ def spades_read_correction(short1, short2, unpaired, spades_dir, threads, spades
 
 
 def spades_assembly(read_files, out_dir, kmers, threads, spades_path, spades_tmp_dir,
-                    just_last=False):
+                    just_last=False, mate_reads=None):
     """
     This runs a SPAdes assembly, possibly continuing from a previous assembly.
     """
     short1 = read_files[0]
     short2 = read_files[1]
     unpaired = read_files[2]
+    mate1, mate2 = mate_reads
 
     using_paired_reads = short1 is not None and short2 is not None and \
         os.path.isfile(short1) and os.path.isfile(short2)
     using_unpaired_reads = unpaired is not None and os.path.isfile(unpaired)
+    using_mate_pairs = mate1 is not None and mate2 is not None and \
+        os.path.isfile(mate1) and os.path.isfile(mate2)
 
     kmer_string = ','.join([str(x) for x in kmers])
     command = [spades_path, '-o', out_dir, '-k', kmer_string, '--threads', str(threads)]
@@ -367,6 +384,8 @@ def spades_assembly(read_files, out_dir, kmers, threads, spades_path, spades_tmp
     else:
         if using_paired_reads:
             command += ['--only-assembler', '-1', short1, '-2', short2]
+        if using_mate_pairs:
+            command += ['--mp1-1', mate1, '--mp1-2', mate2]
         if using_unpaired_reads:
             command += ['--only-assembler', '-s', unpaired]
     if spades_tmp_dir is not None:

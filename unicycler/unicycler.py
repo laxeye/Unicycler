@@ -85,7 +85,8 @@ def main():
                                           args.spades_path, args.threads, args.keep,
                                           args.kmer_count, args.min_kmer_frac, args.max_kmer_frac,
                                           args.kmers, args.no_correct, args.linear_seqs,
-                                          args.spades_tmp_dir, args.largest_component)
+                                          args.spades_tmp_dir, args.largest_component,
+                                          args.mate1, args.mate2)
         determine_copy_depth(graph)
         if args.keep > 0 and not os.path.isfile(best_spades_graph):
             graph.save_to_gfa(best_spades_graph, save_copy_depth_info=True, newline=True,
@@ -266,6 +267,13 @@ def get_arguments():
                              help='FASTQ file of second short reads in each pair (required)')
     input_group.add_argument('-s', '--unpaired', required=False,
                              help='FASTQ file of unpaired short reads (optional)')
+
+    # Mate pair experomental
+    input_group.add_argument('--mate1', required=False,
+                             help='FASTQ file of first mate pair reads in each pair')
+    input_group.add_argument('--mate2', required=False,
+                             help='FASTQ file of second mate pair reads in each pair')
+    
 
     # Long read input options
     input_group.add_argument('-l', '--long', required=False,
@@ -484,6 +492,9 @@ def get_arguments():
     if (args.short1 and not args.short2) or (args.short2 and not args.short1):
         quit_with_error('you must use both --short1 and --short2 or neither')
 
+    if (args.mate1 and not args.mate2) or (args.mate2 and not args.mate1):
+        quit_with_error('you must use both --mate1 and --mate2 or neither')
+
     if not args.short1 and not args.short2 and not args.unpaired and not args.long:
         quit_with_error('no input reads provided (--short1, --short2, --unpaired, --long)')
 
@@ -540,6 +551,10 @@ def get_arguments():
         args.short1 = os.path.abspath(args.short1)
     if args.short2:
         args.short2 = os.path.abspath(args.short2)
+    if args.mate1:
+        args.mate1 = os.path.abspath(args.mate1)
+    if args.mate2:
+        args.mate2 = os.path.abspath(args.mate2)
     if args.unpaired:
         args.unpaired = os.path.abspath(args.unpaired)
     if args.long:
